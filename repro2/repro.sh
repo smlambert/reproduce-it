@@ -1,17 +1,24 @@
 # Build and rebuild Temurin to test if its reproducible
 
-export TEST_JDK_HOME=/usr
-export VENDOR_TEST_REPOS=https://github.com/sophia-guo/openjdk-build.git
-export VENDOR_TEST_BRANCHES=mac
-export VENDOR_TEST_DIRS=test
-export BUILD_LIST=system/reproducibleCompare
+# Create a workspace
+mkdir workspace
+cd workspace
 
-git clone https://github.com/adoptium/aqa-tests.git
+# Download the latest Temurin JDK21 binary and its associated SBOM
+echo "Fetch latest Temurin JDK 21"
+curl -s -X 'GET' \ 
+  'https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk' \ 
+  -H 'accept: */*' > temurin21.tar.gz
 
-cd aqa-tests
-./get.sh
-cd TKG
-make compile
+echo "Fetch latest Temurin SBOM for JDK 21"
+curl -s -X 'GET' \ 
+  'https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/sbom/hotspot/normal/eclipse?project=jdk' \ 
+  -H 'accept: */*' > temurin21.json
 
-make _Rebuild_Same_JDK_Reproducibility_Test_Mac
+tar -xvzf temurin21.tar.gz
+
+docker run -v "$(PWD):/home/jenkins/test" -w "/home/jenkins/" -v "$(PWD):/home/jenkins/jdkbinary/" --name reproducibleCompare centos:7 /bin/bash /home/jenkins/test/linux_repro_build_compare.sh temurin21.json /home/jenkins/jdkbinary
+docker cp reproducibleCompare:/home/jenkins/reprotest.diff ./
+docker cp reproducibleCompare:/home/jenkins/reproJDK.tar.gz ./
+docker container rm reproducibleCompare
 
