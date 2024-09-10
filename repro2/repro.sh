@@ -1,24 +1,24 @@
 # Build and rebuild Temurin to test if its reproducible
+curl -L -X 'GET' \
+  "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk" > temurin21.tar.gz
 
-# Create a workspace
-mkdir workspace
-cd workspace
+echo "Uncompress the JDK binary"
+mkdir jdk21
+tar xvzf temurin21.tar.gz -C jdk21 --one-top-level
+bindir=$(find jdk21 -name bin)
+echo "bindir is  $bindir"
+export TEST_JDK_HOME=$(realpath $bindir/..)
+echo "$TEST_JDK_HOME"
+export VENDOR_TEST_REPOS=https://github.com/adoptium/temurin-build.git
+export VENDOR_TEST_BRANCHES=master
+export VENDOR_TEST_DIRS=/test/system
+export BUILD_LIST=system/reproducibleCompare
 
-# Download the latest Temurin JDK21 binary and its associated SBOM
-echo "Fetch latest Temurin JDK 21"
-curl -s -X 'GET' \ 
-  'https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse?project=jdk' \ 
-  -H 'accept: */*' > temurin21.tar.gz
+git clone https://github.com/adoptium/aqa-tests.git
 
-echo "Fetch latest Temurin SBOM for JDK 21"
-curl -s -X 'GET' \ 
-  'https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/sbom/hotspot/normal/eclipse?project=jdk' \ 
-  -H 'accept: */*' > temurin21.json
+cd aqa-tests
+./get.sh -p x64_linux -r releases -j 21 --vendor_repos $VENDOR_TEST_REPOS --vendor_branches master --vendor_dirs $VENDOR_TEST_DIRS
+cd TKG
+make compile
 
-tar -xvzf temurin21.tar.gz
-
-docker run -v "$(PWD):/home/jenkins/test" -w "/home/jenkins/" -v "$(PWD):/home/jenkins/jdkbinary/" --name reproducibleCompare centos:7 /bin/bash /home/jenkins/test/linux_repro_build_compare.sh temurin21.json /home/jenkins/jdkbinary
-docker cp reproducibleCompare:/home/jenkins/reprotest.diff ./
-docker cp reproducibleCompare:/home/jenkins/reproJDK.tar.gz ./
-docker container rm reproducibleCompare
-
+make _Rebuild_Same_JDK_Reproducibility_Test
